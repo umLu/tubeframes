@@ -59,7 +59,15 @@ def get_video_captions(
         Optional[str]: Caption text or None if not available
     """
     try:
-        transcript_list = ytapi.YouTubeTranscriptApi.list_transcripts(video_id)
+        if hasattr(ytapi.YouTubeTranscriptApi, "list_transcripts"):
+            # Backward compatibility with older youtube_transcript_api versions.
+            transcript_list = ytapi.YouTubeTranscriptApi.list_transcripts(
+                video_id
+            )
+        else:
+            transcript_api = ytapi.YouTubeTranscriptApi()
+            transcript_list = transcript_api.list(video_id)
+
         for lang in accepted_caption_lang:
             try:
                 transcript = transcript_list.find_transcript([lang])
