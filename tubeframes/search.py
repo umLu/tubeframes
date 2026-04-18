@@ -74,14 +74,13 @@ class Search:
         consolidated_search = [search_list]
         while "nextPageToken" in search_list.keys() and maxres > 0:
             time.sleep(0.1)  # Avoid request overload
-            consolidated_search.append(
-                self._search_from_term(
-                    term,
-                    results,
-                    item_type=item_type,
-                    page_token=search_list["nextPageToken"],
-                )
+            search_list = self._search_from_term(
+                term,
+                results,
+                item_type=item_type,
+                page_token=search_list["nextPageToken"],
             )
+            consolidated_search.append(search_list)
             maxres -= self.DEFAULT_MAX_RES
         return consolidated_search
 
