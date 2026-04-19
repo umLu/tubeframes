@@ -1,7 +1,9 @@
 .vscode/
+.venv/
 venv/
 __pycache__/
 dist/
 htmlcov/
 *.egg-info
 .coverage
+.env

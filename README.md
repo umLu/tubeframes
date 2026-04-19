@@ -90,7 +90,7 @@ tubeframes_search.df  # DataFrame with YouTube infos (likes, views, title, etc.)
 
 ### Working with Captions
 
-To include video captions in your results, use the argument ```captions=True```:
+To include video captions in your results, use the argument `caption=True`:
 
 ```python
 import tubeframes as yt
@@ -157,7 +157,7 @@ The `Search` class accepts the following arguments:
 | term | string | Yes | - | YouTube search term |
 | caption | boolean | No | False | Whether to include video captions |
 | maxres | integer | No | 50 | Maximum number of results to return |
-| accepted_caption_lang | list | No | ['en'] | List of accepted languages for captions |
+| accepted_caption_lang | list | No | ['pt', 'en'] | List of accepted languages for captions |
 | item_type | string | No | "video" | Type of search: "video" or "channel" |
 | developer_key | string | No | - | YouTube API key (optional if set as environment variable) |
 
