@@ -1,4 +1,6 @@
 import unittest
+from typing import List, Optional, Tuple
+from unittest.mock import patch
 from tubeframes import Search
 
 
@@ -22,3 +24,35 @@ class TestSearch(unittest.TestCase):
     def test_big_shape(self):
         df_shape = Search("Test", maxres=100).df.shape
         self.assertTrue(df_shape[0] >= 50)
+
+
+class TestSearchPagination(unittest.TestCase):
+
+    def test_consolidate_search_respects_requested_remainder(self) -> None:
+        search = Search.__new__(Search)
+        calls: List[Tuple[int, Optional[str]]] = []
+
+        def fake_search_from_term(
+            _term: str,
+            maxres: int,
+            item_type: str = "video",
+            page_token: Optional[str] = None,
+        ) -> dict:
+            _ = item_type
+            calls.append((maxres, page_token))
+
+            if page_token is None:
+                return {"items": [], "nextPageToken": "PAGE_2"}
+            return {"items": []}
+
+        search._search_from_term = fake_search_from_term
+
+        with patch("tubeframes.search.time.sleep", return_value=None):
+            consolidated = search._consolidate_search(
+                term="python", maxres=75, item_type="video"
+            )
+
+        self.assertEqual(len(consolidated), 2)
+        self.assertEqual(calls[0][0], 50)
+        self.assertEqual(calls[1][0], 25)
+        self.assertEqual(calls[1][1], "PAGE_2")

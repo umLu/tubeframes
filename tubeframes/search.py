@@ -63,17 +63,18 @@ class Search:
         Returns:
             List[Dict]: List of search result pages
         """
-        if maxres <= self.DEFAULT_MAX_RES:
-            results = maxres
-            maxres = 0
-        else:
-            results = self.DEFAULT_MAX_RES
-            maxres -= self.DEFAULT_MAX_RES
+        if maxres <= 0:
+            return []
 
+        remaining_results = maxres
+        results = min(self.DEFAULT_MAX_RES, remaining_results)
         search_list = self._search_from_term(term, results, item_type)
         consolidated_search = [search_list]
-        while "nextPageToken" in search_list.keys() and maxres > 0:
+        remaining_results -= results
+
+        while "nextPageToken" in search_list and remaining_results > 0:
             time.sleep(0.1)  # Avoid request overload
+            results = min(self.DEFAULT_MAX_RES, remaining_results)
             search_list = self._search_from_term(
                 term,
                 results,
@@ -81,7 +82,7 @@ class Search:
                 page_token=search_list["nextPageToken"],
             )
             consolidated_search.append(search_list)
-            maxres -= self.DEFAULT_MAX_RES
+            remaining_results -= results
         return consolidated_search
 
     def _search_from_term(
