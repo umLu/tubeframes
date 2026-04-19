@@ -1,12 +1,25 @@
 from typing import List, Optional, Dict, Any
 import os
+import warnings
 import requests
 import pandas as pd
 from googleapiclient.discovery import build
 import youtube_transcript_api as ytapi
-from tubeframes.config.constants import YOUTUBE_API_SERVICE_NAME
-from tubeframes.config.constants import YOUTUBE_API_VERSION
-from tubeframes.config.constants import YOUTUBE_API_URL
+from tubeframes.config.constants import (
+    YOUTUBE_API_SERVICE_NAME,
+    YOUTUBE_API_VERSION,
+    YOUTUBE_API_URL,
+    VIDEO_STATISTICS_TARGET_COLUMNS,
+)
+
+
+def _warn_statistics_unavailable(video_id: str) -> None:
+    warnings.warn(
+        f"Statistics unavailable for video_id={video_id}. "
+        "Returning NA for statistics columns.",
+        UserWarning,
+        stacklevel=2,
+    )
 
 
 def get_dev_key(dev_key: Optional[str] = None) -> str:
@@ -81,7 +94,9 @@ def get_video_captions(
     return None
 
 
-def get_video_statistics(video_id: str, dev_key: str) -> Dict:
+def get_video_statistics(
+    video_id: str, dev_key: str
+) -> Dict[str, Optional[str]]:
     """
     Get statistics for a video.
 
@@ -90,14 +105,35 @@ def get_video_statistics(video_id: str, dev_key: str) -> Dict:
         dev_key: YouTube API developer key
 
     Returns:
-        Dict: Video statistics
+        Dict[str, Optional[str]]: Video statistics. Target columns defined
+        in ``VIDEO_STATISTICS_TARGET_COLUMNS`` are guaranteed to be present,
+        falling back to ``None`` when the API response is unavailable or
+        omits them.
     """
-    ploads = {"part": "statistics", "id": video_id, "key": dev_key}
+    params = {"part": "statistics", "id": video_id, "key": dev_key}
+    fallback = {column: None for column in VIDEO_STATISTICS_TARGET_COLUMNS}
 
-    response = requests.get(YOUTUBE_API_URL, params=ploads, timeout=180)
+    try:
+        response = requests.get(YOUTUBE_API_URL, params=params, timeout=180)
+        response.raise_for_status()
+        statistics = response.json()["items"][0]["statistics"]
+        if not isinstance(statistics, dict):
+            raise TypeError("statistics payload is not a mapping")
+    except (
+        requests.RequestException,
+        ValueError,
+        KeyError,
+        IndexError,
+        TypeError,
+    ):
+        _warn_statistics_unavailable(video_id)
+        return fallback
 
-    stats = response.json()
-    return stats["items"][0]["statistics"]
+    if any(column not in statistics for column in VIDEO_STATISTICS_TARGET_COLUMNS):
+        _warn_statistics_unavailable(video_id)
+        return {**fallback, **statistics}
+
+    return statistics
 
 
 def process_thumbnails(

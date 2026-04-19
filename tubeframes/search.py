@@ -13,6 +13,7 @@ from tubeframes.utils import (
     process_thumbnails,
     create_df_from_items,
 )
+from tubeframes.config.constants import VIDEO_STATISTICS_TARGET_COLUMNS
 
 
 class Search:
@@ -228,9 +229,10 @@ class Search:
 
         if not df.empty:
             if item_type == "video":
-                drop_columns = ["likeCount", "viewCount"]
-                df.dropna(axis=0, how="any", inplace=True, subset=drop_columns)
-                df = df.astype({"likeCount": int, "viewCount": int})
+                for column in VIDEO_STATISTICS_TARGET_COLUMNS:
+                    df[column] = pd.to_numeric(
+                        df[column], errors="coerce"
+                    ).astype("Int64")
 
             df.set_index(id_key, inplace=True)
             return df
