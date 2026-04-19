@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="tubeframes",
-    version="0.3.2",
+    version="0.3.3",
     author="Luiz P.",
     author_email="umluiz@gmail.com",
     description=(
@@ -45,8 +45,11 @@ setuptools.setup(
         "dataframe pandas api channel transcript subtitle"
     ),
     packages=setuptools.find_packages(),
-    install_requires=["google-api-python-client",
-                      "pandas",
-                      "youtube_transcript_api"],
+    install_requires=[
+        "google-api-python-client",
+        "pandas",
+        "requests",
+        "youtube_transcript_api",
+    ],
     python_requires=">=3.6",
 )
