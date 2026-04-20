@@ -4,7 +4,6 @@ import warnings
 import requests
 import pandas as pd
 from googleapiclient.discovery import build
-import youtube_transcript_api as ytapi
 from tubeframes.config.constants import (
     YOUTUBE_API_SERVICE_NAME,
     YOUTUBE_API_VERSION,
@@ -57,42 +56,6 @@ def create_tubeframes_client(dev_key: str):
     return build(
         YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=dev_key
     )
-
-
-def get_video_captions(
-    video_id: str, accepted_caption_lang: List[str]
-) -> Optional[str]:
-    """
-    Get captions for a specific video.
-
-    Args:
-        video_id: YouTube video ID
-        accepted_caption_lang: List of accepted languages for captions
-
-    Returns:
-        Optional[str]: Caption text or None if not available
-    """
-    try:
-        if hasattr(ytapi.YouTubeTranscriptApi, "list_transcripts"):
-            # Backward compatibility with older youtube_transcript_api versions.
-            transcript_list = ytapi.YouTubeTranscriptApi.list_transcripts(
-                video_id
-            )
-        else:
-            transcript_api = ytapi.YouTubeTranscriptApi()
-            transcript_list = transcript_api.list(video_id)
-
-        for lang in accepted_caption_lang:
-            try:
-                transcript = transcript_list.find_transcript([lang])
-                caption = transcript.fetch()
-                df_caption = pd.DataFrame.from_dict(caption)
-                return "; ".join(df_caption["text"])
-            except ytapi._errors.NoTranscriptFound:
-                continue
-    except ytapi._errors.TranscriptsDisabled:
-        return None
-    return None
 
 
 def _build_statistics_fallback() -> Dict[str, Optional[str]]:

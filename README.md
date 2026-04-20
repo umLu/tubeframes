@@ -44,7 +44,7 @@ This project uses the YouTube Data API and is not affiliated with or endorsed by
 
 ### Requirements
 
-- Python 3.6+
+- Python 3.9+
 - YouTube Data API key
 - Required dependencies are installed automatically
 

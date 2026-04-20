@@ -9,7 +9,6 @@ import requests
 from tubeframes.utils import (
     get_dev_key,
     create_tubeframes_client,
-    get_video_captions,
     get_video_statistics,
     create_df_from_items,
 )
@@ -54,11 +53,6 @@ class TestUtilsFunctions(unittest.TestCase):
         self.assertIn(self.TEST_VIDEO_ID, stats_by_id)
         for column in VIDEO_STATISTICS_TARGET_COLUMNS:
             self.assertIn(column, stats_by_id[self.TEST_VIDEO_ID])
-
-    def test_get_video_captions(self):
-        """Test getting video captions."""
-        captions = get_video_captions(self.TEST_VIDEO_ID, ["en"])
-        self.assertTrue(captions is None or isinstance(captions, str))
 
     def test_create_df_from_items(self):
         """Test creating DataFrame from items."""

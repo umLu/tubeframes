@@ -3,10 +3,10 @@ import time
 import pandas as pd
 
 
+from tubeframes.captions import CaptionFetcher
 from tubeframes.utils import (
     get_dev_key,
     create_tubeframes_client,
-    get_video_captions,
     get_video_statistics,
     process_thumbnails,
     create_df_from_items,
@@ -191,6 +191,10 @@ class Search:
                 [item_id for _, item_id in valid_items], self._developer_key
             )
 
+        caption_fetcher: Optional[CaptionFetcher] = None
+        if item_type == "video" and caption:
+            caption_fetcher = CaptionFetcher()
+
         items_data = []
         for search_item, item_id in valid_items:
             snippet = search_item["snippet"]
@@ -203,12 +207,15 @@ class Search:
             if item_type == "video":
                 video_info.update(stats_by_id.get(item_id, {}))
 
-                if caption:
-                    video_info["video_caption"] = get_video_captions(
+                if caption and caption_fetcher is not None:
+                    video_info["video_caption"] = caption_fetcher.fetch(
                         item_id, self._accepted_caption_lang
                     )
 
             items_data.append(video_info)
+
+        if caption_fetcher is not None:
+            caption_fetcher.emit_warning_summary("Search")
 
         df = create_df_from_items(items_data)
 

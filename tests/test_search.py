@@ -1,6 +1,9 @@
 import unittest
 from typing import List, Optional, Tuple
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import pandas as pd
+
 from tubeframes import Search
 
 
@@ -60,3 +63,50 @@ class TestSearchPagination(unittest.TestCase):
         self.assertEqual(calls[0][0], 50)
         self.assertEqual(calls[1][0], 25)
         self.assertEqual(calls[1][1], "PAGE_2")
+
+
+class TestSearchCaptionIntegration(unittest.TestCase):
+
+    def test_build_dataframe_keeps_video_rows_when_caption_fails(self) -> None:
+        search = Search.__new__(Search)
+        search._accepted_caption_lang = ["en"]
+        search._developer_key = "key"
+        search.raw = [
+            {
+                "items": [
+                    {
+                        "id": {"videoId": "vid1"},
+                        "snippet": {
+                            "title": "Title 1",
+                            "publishedAt": "2022-01-01T00:00:00Z",
+                        },
+                    },
+                    {
+                        "id": {"videoId": "vid2"},
+                        "snippet": {
+                            "title": "Title 2",
+                            "publishedAt": "2022-01-02T00:00:00Z",
+                        },
+                    },
+                ]
+            }
+        ]
+
+        mock_fetcher = Mock()
+        mock_fetcher.fetch.side_effect = ["caption text", None]
+
+        with patch(
+            "tubeframes.search.get_video_statistics",
+            return_value={
+                "vid1": {"viewCount": "10", "likeCount": "2"},
+                "vid2": {"viewCount": "20", "likeCount": "3"},
+            },
+        ), patch("tubeframes.search.CaptionFetcher", return_value=mock_fetcher):
+            df = search._build_dataframe(item_type="video", caption=True)
+
+        self.assertIsNotNone(df)
+        self.assertEqual(df.loc["vid1", "video_caption"], "caption text")
+        self.assertTrue(pd.isna(df.loc["vid2", "video_caption"]))
+        self.assertIn("viewCount", df.columns)
+        self.assertIn("likeCount", df.columns)
+        mock_fetcher.emit_warning_summary.assert_called_once_with("Search")

@@ -1,10 +1,10 @@
 from typing import List, Union, Dict, Optional
 import pandas as pd
 
+from tubeframes.captions import CaptionFetcher
 from tubeframes.utils import (
     get_dev_key,
     create_tubeframes_client,
-    get_video_captions,
     process_thumbnails,
     create_df_from_items,
 )
@@ -83,6 +83,7 @@ class ChannelInfo:
             pd.DataFrame: DataFrame with video information and captions.
         """
         video_data = []
+        caption_fetcher = CaptionFetcher()
 
         for channel_id, response in self.raw_data.items():
             if "items" not in response:
@@ -110,7 +111,7 @@ class ChannelInfo:
                     "title": snippet.get("title"),
                     "description": snippet.get("description"),
                     "publishedAt": snippet.get("publishedAt"),
-                    "caption": get_video_captions(
+                    "caption": caption_fetcher.fetch(
                         video_id, self._accepted_caption_lang
                     ),
                 }
@@ -119,6 +120,8 @@ class ChannelInfo:
                 video_info = process_thumbnails(snippet, video_info)
 
                 video_data.append(video_info)
+
+        caption_fetcher.emit_warning_summary("ChannelInfo")
 
         # Create DataFrame from collected items
         return create_df_from_items(video_data)

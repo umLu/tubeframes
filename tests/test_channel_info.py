@@ -1,4 +1,8 @@
 import unittest
+from unittest.mock import Mock, patch
+
+import pandas as pd
+
 from tubeframes import ChannelInfo
 
 
@@ -39,6 +43,53 @@ class TestChannelInfo(unittest.TestCase):
         )
 
         self.assertIn("caption", channel_info.df.columns)
+
+
+class TestChannelInfoCaptionIntegration(unittest.TestCase):
+
+    def test_build_dataframe_keeps_video_rows_when_caption_fails(self) -> None:
+        channel_info = ChannelInfo.__new__(ChannelInfo)
+        channel_info._accepted_caption_lang = ["en"]
+        channel_info.raw_data = {
+            "channel_1": {
+                "items": [
+                    {
+                        "snippet": {
+                            "type": "upload",
+                            "title": "Video 1",
+                            "description": "Desc 1",
+                            "publishedAt": "2022-01-01T00:00:00Z",
+                        },
+                        "contentDetails": {"upload": {"videoId": "vid1"}},
+                    },
+                    {
+                        "snippet": {
+                            "type": "upload",
+                            "title": "Video 2",
+                            "description": "Desc 2",
+                            "publishedAt": "2022-01-02T00:00:00Z",
+                        },
+                        "contentDetails": {"upload": {"videoId": "vid2"}},
+                    },
+                ]
+            }
+        }
+
+        mock_fetcher = Mock()
+        mock_fetcher.fetch.side_effect = ["caption text", None]
+
+        with patch(
+            "tubeframes.channel_info.CaptionFetcher",
+            return_value=mock_fetcher,
+        ):
+            df = channel_info._build_dataframe()
+
+        self.assertEqual(len(df), 2)
+        self.assertEqual(df.loc[0, "caption"], "caption text")
+        self.assertTrue(pd.isna(df.loc[1, "caption"]))
+        mock_fetcher.emit_warning_summary.assert_called_once_with(
+            "ChannelInfo"
+        )
 
 
 if __name__ == "__main__":
