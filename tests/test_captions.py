@@ -77,6 +77,25 @@ class TestCaptionFetcher(unittest.TestCase):
         self.assertIsNotNone(track)
         self.assertEqual(track["url"], "http://example.com/en")
 
+    def test_transcript_language_variant_is_supported(self) -> None:
+        class FakeTranscript:
+            def __init__(self, language_code: str) -> None:
+                self.language_code = language_code
+
+            @staticmethod
+            def fetch() -> list:
+                return [{"text": "hello world"}]
+
+        fetcher = CaptionFetcher()
+        with patch.object(
+            CaptionFetcher,
+            "_list_transcripts",
+            return_value=[FakeTranscript("en-US")],
+        ):
+            caption = fetcher.fetch("video_1", ["en"])
+
+        self.assertEqual(caption, "hello world")
+
     def test_fetch_uses_cache_per_instance(self) -> None:
         fetcher = CaptionFetcher()
         with patch.object(

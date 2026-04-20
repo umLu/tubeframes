@@ -31,6 +31,10 @@ _FETCH_ERROR = "error"
 _REASON_TRANSCRIPT_API_ERROR = "transcript_api_error"
 _REASON_YTDLP_FAILED = "blocked_ytdlp_failed"
 
+_LANG_MATCH_NONE = 0
+_LANG_MATCH_VARIANT = 1
+_LANG_MATCH_EXACT = 2
+
 _FAILURE_REASON_LABELS = {
     _REASON_TRANSCRIPT_API_ERROR: "transcript API failed after retries",
     _REASON_YTDLP_FAILED: "IP blocked and yt-dlp fallback failed",
@@ -160,9 +164,17 @@ class CaptionFetcher:
                 return _FETCH_EXPECTED_EMPTY, None
             return _FETCH_ERROR, None
 
-        for lang in accepted_caption_lang:
+        try:
+            transcripts = list(transcript_list)
+        except TypeError:
+            return _FETCH_ERROR, None
+
+        selected_transcripts = self._select_transcripts(
+            transcripts, accepted_caption_lang
+        )
+
+        for transcript in selected_transcripts:
             try:
-                transcript = transcript_list.find_transcript([lang])
                 caption = transcript.fetch()
                 caption_text = self._segments_to_text(caption)
                 if caption_text is not None:
@@ -212,6 +224,46 @@ class CaptionFetcher:
         if not parts:
             return None
         return "; ".join(parts)
+
+    @staticmethod
+    def _language_match_rank(code: object, lang_lower: str) -> int:
+        if not isinstance(code, str):
+            return _LANG_MATCH_NONE
+
+        code_lower = code.lower()
+        if code_lower == lang_lower:
+            return _LANG_MATCH_EXACT
+        if code_lower.startswith(f"{lang_lower}-") or code_lower.startswith(
+            f"{lang_lower}_"
+        ):
+            return _LANG_MATCH_VARIANT
+        return _LANG_MATCH_NONE
+
+    @staticmethod
+    def _select_transcripts(
+        transcripts: Sequence[object], accepted_caption_lang: Sequence[str]
+    ) -> List[object]:
+        selected_transcripts: List[object] = []
+        for lang in accepted_caption_lang:
+            lang_lower = lang.lower()
+            exact_match: Optional[object] = None
+            variant_match: Optional[object] = None
+
+            for transcript in transcripts:
+                match_rank = CaptionFetcher._language_match_rank(
+                    getattr(transcript, "language_code", None), lang_lower
+                )
+                if match_rank == _LANG_MATCH_EXACT:
+                    exact_match = transcript
+                    break
+                if match_rank == _LANG_MATCH_VARIANT:
+                    variant_match = transcript
+
+            selected = exact_match if exact_match is not None else variant_match
+            if selected is not None and selected not in selected_transcripts:
+                selected_transcripts.append(selected)
+
+        return selected_transcripts
 
     def _fetch_with_ytdlp(
         self, video_id: str, accepted_caption_lang: Sequence[str]
@@ -270,16 +322,12 @@ class CaptionFetcher:
             variant_track = None
 
             for code, entries in language_map.items():
-                if not isinstance(code, str):
-                    continue
-                code_lower = code.lower()
-                if code_lower == lang_lower:
+                match_rank = CaptionFetcher._language_match_rank(code, lang_lower)
+                if match_rank == _LANG_MATCH_EXACT:
                     track = CaptionFetcher._pick_preferred_track(entries)
                     if track is not None:
                         return track
-                if code_lower.startswith(f"{lang_lower}-") or code_lower.startswith(
-                    f"{lang_lower}_"
-                ):
+                if match_rank == _LANG_MATCH_VARIANT:
                     variant_track = CaptionFetcher._pick_preferred_track(entries)
 
             if variant_track is not None:
