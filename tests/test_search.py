@@ -13,7 +13,7 @@ class TestSearch(unittest.TestCase):
     def test_df_shape(self):
         df_shape = Search("Test", maxres=25).df
         self.assertTrue(df_shape.shape[0] >= 1)
-        self.assertEqual(df_shape.shape[1], 13)
+        self.assertEqual(df_shape.shape[1], 14)
 
     def test_caption(self):
         df_caption = Search("Test", caption=True).df
@@ -187,8 +187,16 @@ class TestSearchCaptionIntegration(unittest.TestCase):
         with patch(
             "tubeframes.search.get_video_statistics",
             return_value={
-                "vid1": {"viewCount": "10", "likeCount": "2"},
-                "vid2": {"viewCount": "20", "likeCount": "3"},
+                "vid1": {
+                    "viewCount": "10",
+                    "likeCount": "2",
+                    "commentCount": "1",
+                },
+                "vid2": {
+                    "viewCount": "20",
+                    "likeCount": "3",
+                    "commentCount": "2",
+                },
             },
         ), patch("tubeframes.search.CaptionFetcher", return_value=mock_fetcher):
             df = search._build_dataframe(item_type="video", caption=True)

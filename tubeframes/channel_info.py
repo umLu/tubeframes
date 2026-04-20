@@ -6,6 +6,7 @@ from tubeframes.captions import CaptionFetcher
 from tubeframes.utils import (
     get_dev_key,
     create_tubeframes_client,
+    get_video_statistics,
     process_thumbnails,
     create_df_from_items,
     format_datetime_to_rfc3339,
@@ -113,7 +114,8 @@ class ChannelInfo:
         Build a DataFrame from the collected data.
 
         Returns:
-            pd.DataFrame: DataFrame with video information and captions.
+            pd.DataFrame: DataFrame with video information, captions,
+            and video statistics.
         """
         video_data = []
         caption_fetcher = CaptionFetcher()
@@ -153,6 +155,15 @@ class ChannelInfo:
                 video_info = process_thumbnails(snippet, video_info)
 
                 video_data.append(video_info)
+
+        stats_by_id: Dict[str, Dict[str, Optional[str]]] = {}
+        if video_data:
+            video_ids = list(dict.fromkeys(info["videoId"] for info in video_data))
+            stats_by_id = get_video_statistics(video_ids, self._developer_key)
+            for video_info in video_data:
+                video_info.update(
+                    stats_by_id.get(video_info["videoId"], {})
+                )
 
         caption_fetcher.emit_warning_summary("ChannelInfo")
 

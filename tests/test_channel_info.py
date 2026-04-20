@@ -92,6 +92,7 @@ class TestChannelInfoCaptionIntegration(unittest.TestCase):
     def test_build_dataframe_keeps_video_rows_when_caption_fails(self) -> None:
         channel_info = ChannelInfo.__new__(ChannelInfo)
         channel_info._accepted_caption_lang = ["en"]
+        channel_info._developer_key = "key"
         channel_info.raw_data = {
             "channel_1": {
                 "items": [
@@ -123,12 +124,29 @@ class TestChannelInfoCaptionIntegration(unittest.TestCase):
         with patch(
             "tubeframes.channel_info.CaptionFetcher",
             return_value=mock_fetcher,
-        ):
+        ), patch(
+            "tubeframes.channel_info.get_video_statistics",
+            return_value={
+                "vid1": {
+                    "viewCount": "10",
+                    "likeCount": "2",
+                    "commentCount": "1",
+                },
+                "vid2": {
+                    "viewCount": "20",
+                    "likeCount": "3",
+                    "commentCount": "2",
+                },
+            },
+        ) as mocked_statistics:
             df = channel_info._build_dataframe()
 
         self.assertEqual(len(df), 2)
         self.assertEqual(df.loc[0, "caption"], "caption text")
         self.assertTrue(pd.isna(df.loc[1, "caption"]))
+        self.assertEqual(df.loc[0, "viewCount"], "10")
+        self.assertEqual(df.loc[1, "commentCount"], "2")
+        mocked_statistics.assert_called_once_with(["vid1", "vid2"], "key")
         mock_fetcher.emit_warning_summary.assert_called_once_with(
             "ChannelInfo"
         )
