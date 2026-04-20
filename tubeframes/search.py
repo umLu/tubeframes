@@ -1,8 +1,6 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import time
-import requests
 import pandas as pd
-from googleapiclient.errors import HttpError
 
 
 from tubeframes.utils import (
@@ -13,13 +11,14 @@ from tubeframes.utils import (
     process_thumbnails,
     create_df_from_items,
 )
-from tubeframes.config.constants import VIDEO_STATISTICS_TARGET_COLUMNS
+from tubeframes.config.constants import (
+    VIDEO_STATISTICS_TARGET_COLUMNS,
+    YOUTUBE_API_MAX_PAGE_SIZE,
+)
 
 
 class Search:
     """Main class for YouTube search."""
-
-    DEFAULT_MAX_RES = 50
 
     def __init__(
         self,
@@ -68,14 +67,14 @@ class Search:
             return []
 
         remaining_results = maxres
-        results = min(self.DEFAULT_MAX_RES, remaining_results)
+        results = min(YOUTUBE_API_MAX_PAGE_SIZE, remaining_results)
         search_list = self._search_from_term(term, results, item_type)
         consolidated_search = [search_list]
         remaining_results -= results
 
         while "nextPageToken" in search_list and remaining_results > 0:
             time.sleep(0.1)  # Avoid request overload
-            results = min(self.DEFAULT_MAX_RES, remaining_results)
+            results = min(YOUTUBE_API_MAX_PAGE_SIZE, remaining_results)
             search_list = self._search_from_term(
                 term,
                 results,
@@ -108,22 +107,16 @@ class Search:
         Raises:
             HttpError: If API request fails
         """
-        try:
-            search_list = self._search_request(
-                term, maxres, page_token, item_type
-            )
-            # Validate response
-            if isinstance(search_list, dict):
-                expected_keys = [
-                    "kind", "etag", "regionCode", "pageInfo", "items"
-                ]
-                if not set(search_list.keys()).issuperset(set(expected_keys)):
-                    raise KeyError("Missing expected keys in API response")
-            else:
-                raise TypeError("API response is not a dictionary")
-        except HttpError as e:
-            print(f"An HTTP error {e.resp.status} occurred:\n{e.content}")
-            raise
+        search_list = self._search_request(term, maxres, page_token, item_type)
+        # Validate response
+        if isinstance(search_list, dict):
+            expected_keys = [
+                "kind", "etag", "regionCode", "pageInfo", "items"
+            ]
+            if not set(search_list.keys()).issuperset(set(expected_keys)):
+                raise KeyError("Missing expected keys in API response")
+        else:
+            raise TypeError("API response is not a dictionary")
         return search_list
 
     def _search_request(
@@ -172,70 +165,61 @@ class Search:
 
         Returns:
             Optional[pd.DataFrame]: DataFrame with search results or None
+
+        Raises:
+            ValueError: If ``item_type`` is not "video" or "channel".
         """
-        items_data = []
+        id_key_by_type = {"video": "videoId", "channel": "channelId"}
+        id_key = id_key_by_type.get(item_type)
+        if id_key is None:
+            raise ValueError("item_type must be 'video' or 'channel'")
+
+        valid_items: List[Tuple[Dict, str]] = []
         for search_req in self.raw:
-            for search_item in search_req["items"]:
-                try:
-                    if item_type == "video":
-                        id_key = "videoId"
-                    elif item_type == "channel":
-                        id_key = "channelId"
-                    else:
-                        continue
-
-                    if not (
-                        "id" in search_item
-                        and id_key in search_item["id"]
-                        and "snippet" in search_item
-                    ):
-                        continue
-
-                    item_id = search_item["id"][id_key]
-                    snippet = search_item["snippet"]
-
-                    # Prepare basic video info from snippet
-                    video_info = snippet.copy()
-                    video_info[id_key] = item_id
-
-                    # Process thumbnails
-                    video_info = process_thumbnails(snippet, video_info)
-
-                    if item_type == "video":
-                        # Add statistics
-                        item_stats = get_video_statistics(
-                            item_id, self._developer_key
-                        )
-                        video_info.update(item_stats)
-
-                        # Add captions if requested
-                        if caption:
-                            video_caption = get_video_captions(
-                                item_id, self._accepted_caption_lang
-                            )
-                            video_info["video_caption"] = video_caption
-
-                    items_data.append(video_info)
-
-                except (
-                    KeyError,
-                    ValueError,
-                    HttpError,
-                    requests.RequestException,
+            for search_item in search_req.get("items", []):
+                if not (
+                    "id" in search_item
+                    and id_key in search_item["id"]
+                    and "snippet" in search_item
                 ):
                     continue
+                valid_items.append((search_item, search_item["id"][id_key]))
+
+        stats_by_id: Dict[str, Dict[str, Optional[str]]] = {}
+        if item_type == "video" and valid_items:
+            stats_by_id = get_video_statistics(
+                [item_id for _, item_id in valid_items], self._developer_key
+            )
+
+        items_data = []
+        for search_item, item_id in valid_items:
+            snippet = search_item["snippet"]
+
+            video_info = snippet.copy()
+            video_info[id_key] = item_id
+
+            video_info = process_thumbnails(snippet, video_info)
+
+            if item_type == "video":
+                video_info.update(stats_by_id.get(item_id, {}))
+
+                if caption:
+                    video_info["video_caption"] = get_video_captions(
+                        item_id, self._accepted_caption_lang
+                    )
+
+            items_data.append(video_info)
 
         df = create_df_from_items(items_data)
 
-        if not df.empty:
-            if item_type == "video":
-                for column in VIDEO_STATISTICS_TARGET_COLUMNS:
-                    df[column] = pd.to_numeric(
-                        df[column], errors="coerce"
-                    ).astype("Int64")
-
-            df.set_index(id_key, inplace=True)
-            return df
-        else:
-            print("No results. The DataFrame attribute will be None")
+        if df.empty:
             return None
+
+        if item_type == "video":
+            for column in VIDEO_STATISTICS_TARGET_COLUMNS:
+                df[column] = pd.to_numeric(
+                    df[column], errors="coerce"
+                ).astype("Int64")
+
+        df.set_index(id_key, inplace=True)
+        return df

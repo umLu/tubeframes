@@ -10,6 +10,7 @@ from tubeframes.config.constants import (
     YOUTUBE_API_VERSION,
     YOUTUBE_API_URL,
     VIDEO_STATISTICS_TARGET_COLUMNS,
+    YOUTUBE_API_MAX_PAGE_SIZE,
 )
 
 
@@ -94,46 +95,86 @@ def get_video_captions(
     return None
 
 
-def get_video_statistics(
-    video_id: str, dev_key: str
-) -> Dict[str, Optional[str]]:
-    """
-    Get statistics for a video.
+def _build_statistics_fallback() -> Dict[str, Optional[str]]:
+    return {column: None for column in VIDEO_STATISTICS_TARGET_COLUMNS}
 
-    Args:
-        video_id: YouTube video ID
-        dev_key: YouTube API developer key
 
-    Returns:
-        Dict[str, Optional[str]]: Video statistics. Target columns defined
-        in ``VIDEO_STATISTICS_TARGET_COLUMNS`` are guaranteed to be present,
-        falling back to ``None`` when the API response is unavailable or
-        omits them.
+def _fetch_statistics(
+    video_ids: List[str], dev_key: str
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """Fetch statistics for a single videos.list batch.
+
+    ``video_ids`` must have at most ``YOUTUBE_API_MAX_PAGE_SIZE`` entries.
     """
-    params = {"part": "statistics", "id": video_id, "key": dev_key}
-    fallback = {column: None for column in VIDEO_STATISTICS_TARGET_COLUMNS}
+    params = {"part": "statistics", "id": ",".join(video_ids), "key": dev_key}
 
     try:
         response = requests.get(YOUTUBE_API_URL, params=params, timeout=180)
         response.raise_for_status()
-        statistics = response.json()["items"][0]["statistics"]
-        if not isinstance(statistics, dict):
-            raise TypeError("statistics payload is not a mapping")
+        items = response.json()["items"]
+        if not isinstance(items, list):
+            raise TypeError("items payload is not a list")
     except (
         requests.RequestException,
         ValueError,
         KeyError,
-        IndexError,
         TypeError,
     ):
-        _warn_statistics_unavailable(video_id)
-        return fallback
+        results: Dict[str, Dict[str, Optional[str]]] = {}
+        for video_id in video_ids:
+            _warn_statistics_unavailable(video_id)
+            results[video_id] = _build_statistics_fallback()
+        return results
 
-    if any(column not in statistics for column in VIDEO_STATISTICS_TARGET_COLUMNS):
-        _warn_statistics_unavailable(video_id)
-        return {**fallback, **statistics}
+    indexed: Dict[str, Dict[str, Optional[str]]] = {}
+    fallback = _build_statistics_fallback()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        video_id = item.get("id")
+        statistics = item.get("statistics")
+        if not isinstance(video_id, str) or not isinstance(statistics, dict):
+            continue
+        if any(column not in statistics for column in VIDEO_STATISTICS_TARGET_COLUMNS):
+            _warn_statistics_unavailable(video_id)
+            indexed[video_id] = {**fallback, **statistics}
+        else:
+            indexed[video_id] = statistics
 
-    return statistics
+    for video_id in video_ids:
+        if video_id not in indexed:
+            _warn_statistics_unavailable(video_id)
+            indexed[video_id] = _build_statistics_fallback()
+
+    return indexed
+
+
+def get_video_statistics(
+    video_ids: List[str], dev_key: str
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """
+    Fetch statistics for multiple videos in batches of up to
+    ``YOUTUBE_API_MAX_PAGE_SIZE`` IDs per request.
+
+    Args:
+        video_ids: List of YouTube video IDs.
+        dev_key: YouTube API developer key.
+
+    Returns:
+        Mapping video_id -> statistics dict. Every ID in ``video_ids`` is
+        present in the result. IDs missing from the API response or whose
+        target columns are incomplete receive the fallback dict (``None``
+        for every column in ``VIDEO_STATISTICS_TARGET_COLUMNS``) and emit
+        a ``UserWarning``.
+    """
+    if not video_ids:
+        return {}
+
+    results: Dict[str, Dict[str, Optional[str]]] = {}
+    for start in range(0, len(video_ids), YOUTUBE_API_MAX_PAGE_SIZE):
+        batch = video_ids[start : start + YOUTUBE_API_MAX_PAGE_SIZE]
+        results.update(_fetch_statistics(batch, dev_key))
+    return results
 
 
 def process_thumbnails(

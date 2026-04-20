@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="tubeframes",
-    version="0.3.4",
+    version="0.4.0",
     author="Luiz P.",
     author_email="umluiz@gmail.com",
     description=(

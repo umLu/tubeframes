@@ -1,7 +1,11 @@
-import unittest
 import os
+import unittest
+import warnings
 from unittest.mock import Mock, patch
+
 import pandas as pd
+import requests
+
 from tubeframes.utils import (
     get_dev_key,
     create_tubeframes_client,
@@ -42,12 +46,14 @@ class TestUtilsFunctions(unittest.TestCase):
         self.assertTrue(hasattr(client, "videos"))
         self.assertTrue(hasattr(client, "activities"))
 
-    def test_get_video_statistics(self):
-        """Test getting video statistics."""
-        stats = get_video_statistics(self.TEST_VIDEO_ID, self.developer_key)
-        # Check if statistics has expected fields
-        self.assertIn("viewCount", stats)
-        self.assertIn("likeCount", stats)
+    def test_get_video_statistics_single(self):
+        """Test batch statistics with a single real video."""
+        stats_by_id = get_video_statistics(
+            [self.TEST_VIDEO_ID], self.developer_key
+        )
+        self.assertIn(self.TEST_VIDEO_ID, stats_by_id)
+        for column in VIDEO_STATISTICS_TARGET_COLUMNS:
+            self.assertIn(column, stats_by_id[self.TEST_VIDEO_ID])
 
     def test_get_video_captions(self):
         """Test getting video captions."""
@@ -84,7 +90,7 @@ class TestUtilsFunctions(unittest.TestCase):
 class TestGetVideoStatistics(unittest.TestCase):
 
     FALLBACK = {column: None for column in VIDEO_STATISTICS_TARGET_COLUMNS}
-    WARNING_RE = "Statistics unavailable for video_id=vid"
+    WARNING_RE = "Statistics unavailable for video_id="
 
     @staticmethod
     def _patched_get(payload: dict):
@@ -93,21 +99,82 @@ class TestGetVideoStatistics(unittest.TestCase):
         response.json.return_value = payload
         return patch("tubeframes.utils.requests.get", return_value=response)
 
-    def test_full_fallback_when_payload_lacks_statistics(self) -> None:
-        """Empty items or non-mapping statistics yield NA for all target columns."""
-        for payload in ({"items": []}, {"items": [{"statistics": None}]}):
-            with self.subTest(payload=payload), self._patched_get(payload):
-                with self.assertWarnsRegex(UserWarning, self.WARNING_RE):
-                    stats = get_video_statistics("vid", "key")
-                self.assertEqual(stats, self.FALLBACK)
+    def test_empty_input_returns_empty_dict(self) -> None:
+        """No IDs -> no API call and empty result."""
+        with patch("tubeframes.utils.requests.get") as mocked:
+            result = get_video_statistics([], "key")
+        self.assertEqual(result, {})
+        mocked.assert_not_called()
 
-    def test_partial_payload_fills_missing_columns_only(self) -> None:
-        """Present columns are preserved; missing target columns get None."""
-        payload = {"items": [{"statistics": {"viewCount": "10"}}]}
+    def test_missing_id_in_response_gets_fallback(self) -> None:
+        """IDs absent from the API payload receive the fallback + warning."""
+        payload = {"items": []}
         with self._patched_get(payload):
             with self.assertWarnsRegex(UserWarning, self.WARNING_RE):
-                stats = get_video_statistics("vid", "key")
-        self.assertEqual(stats, {**self.FALLBACK, "viewCount": "10"})
+                result = get_video_statistics(["vid1"], "key")
+        self.assertEqual(result, {"vid1": self.FALLBACK})
+
+    def test_partial_statistics_fills_missing_columns_only(self) -> None:
+        """Present columns preserved; missing target columns get None."""
+        payload = {
+            "items": [{"id": "vid1", "statistics": {"viewCount": "10"}}]
+        }
+        with self._patched_get(payload):
+            with self.assertWarnsRegex(UserWarning, self.WARNING_RE):
+                result = get_video_statistics(["vid1"], "key")
+        self.assertEqual(
+            result, {"vid1": {**self.FALLBACK, "viewCount": "10"}}
+        )
+
+    def test_full_statistics_returned_as_is(self) -> None:
+        """All target columns present -> no warning, payload returned."""
+        full = {column: "1" for column in VIDEO_STATISTICS_TARGET_COLUMNS}
+        payload = {"items": [{"id": "vid1", "statistics": full}]}
+        with self._patched_get(payload):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                result = get_video_statistics(["vid1"], "key")
+        self.assertEqual(result, {"vid1": full})
+
+    def test_non_mapping_items_are_ignored(self) -> None:
+        """Malformed non-dict entries do not crash statistics parsing."""
+        full = {column: "1" for column in VIDEO_STATISTICS_TARGET_COLUMNS}
+        payload = {"items": [None, "oops", {"id": "vid1", "statistics": full}]}
+        with self._patched_get(payload):
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                result = get_video_statistics(["vid1"], "key")
+        self.assertEqual(result, {"vid1": full})
+
+    def test_chunking_splits_into_batches_of_50(self) -> None:
+        """>50 IDs triggers multiple API calls."""
+        ids = [f"vid{i}" for i in range(75)]
+        full = {column: "0" for column in VIDEO_STATISTICS_TARGET_COLUMNS}
+        payload_a = {"items": [{"id": vid, "statistics": full} for vid in ids[:50]]}
+        payload_b = {"items": [{"id": vid, "statistics": full} for vid in ids[50:]]}
+        response_a, response_b = Mock(), Mock()
+        for resp, payload in ((response_a, payload_a), (response_b, payload_b)):
+            resp.raise_for_status.return_value = None
+            resp.json.return_value = payload
+        with patch(
+            "tubeframes.utils.requests.get",
+            side_effect=[response_a, response_b],
+        ) as mocked:
+            result = get_video_statistics(ids, "key")
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(len(result), 75)
+
+    def test_network_failure_falls_back_for_entire_batch(self) -> None:
+        """Batch-level error -> fallback for every ID in the batch."""
+        with patch(
+            "tubeframes.utils.requests.get",
+            side_effect=requests.ConnectionError("boom"),
+        ):
+            with self.assertWarns(UserWarning):
+                result = get_video_statistics(["vid1", "vid2"], "key")
+        self.assertEqual(
+            result, {"vid1": self.FALLBACK, "vid2": self.FALLBACK}
+        )
 
 
 if __name__ == "__main__":
