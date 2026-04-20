@@ -144,8 +144,10 @@ class TestChannelInfoCaptionIntegration(unittest.TestCase):
         self.assertEqual(len(df), 2)
         self.assertEqual(df.loc[0, "caption"], "caption text")
         self.assertTrue(pd.isna(df.loc[1, "caption"]))
-        self.assertEqual(df.loc[0, "viewCount"], "10")
-        self.assertEqual(df.loc[1, "commentCount"], "2")
+        self.assertEqual(df.loc[0, "viewCount"], 10)
+        self.assertEqual(df.loc[1, "commentCount"], 2)
+        self.assertEqual(str(df["viewCount"].dtype), "Int64")
+        self.assertEqual(str(df["commentCount"].dtype), "Int64")
         mocked_statistics.assert_called_once_with(["vid1", "vid2"], "key")
         mock_fetcher.emit_warning_summary.assert_called_once_with(
             "ChannelInfo"

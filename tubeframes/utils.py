@@ -207,3 +207,22 @@ def create_df_from_items(items_data: List[Dict[str, Any]]) -> pd.DataFrame:
         df["publishedAt"] = pd.to_datetime(df["publishedAt"])
 
     return df
+
+
+def convert_statistics_columns_to_nullable_int(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert known statistics columns to pandas nullable integer (Int64).
+
+    Args:
+        df: DataFrame potentially containing statistics columns.
+
+    Returns:
+        pd.DataFrame: The same DataFrame with converted statistics columns.
+    """
+    for column in VIDEO_STATISTICS_TARGET_COLUMNS:
+        if column not in df.columns:
+            continue
+        df[column] = pd.to_numeric(df[column], errors="coerce").astype(
+            "Int64"
+        )
+    return df

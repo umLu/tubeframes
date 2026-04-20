@@ -9,6 +9,7 @@ from tubeframes.utils import (
     get_video_statistics,
     process_thumbnails,
     create_df_from_items,
+    convert_statistics_columns_to_nullable_int,
     format_datetime_to_rfc3339,
 )
 
@@ -168,4 +169,5 @@ class ChannelInfo:
         caption_fetcher.emit_warning_summary("ChannelInfo")
 
         # Create DataFrame from collected items
-        return create_df_from_items(video_data)
+        df = create_df_from_items(video_data)
+        return convert_statistics_columns_to_nullable_int(df)

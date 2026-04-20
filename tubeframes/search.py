@@ -11,6 +11,7 @@ from tubeframes.utils import (
     get_video_statistics,
     process_thumbnails,
     create_df_from_items,
+    convert_statistics_columns_to_nullable_int,
     format_datetime_to_rfc3339,
 )
 from tubeframes.config.constants import (
@@ -19,7 +20,6 @@ from tubeframes.config.constants import (
     SEARCH_ORDER_VALUES,
     SEARCH_SAFE_SEARCH_VALUES,
     SEARCH_VIDEO_DURATION_VALUES,
-    VIDEO_STATISTICS_TARGET_COLUMNS,
     YOUTUBE_API_MAX_PAGE_SIZE,
 )
 
@@ -318,10 +318,7 @@ class Search:
             return None
 
         if item_type == "video":
-            for column in VIDEO_STATISTICS_TARGET_COLUMNS:
-                df[column] = pd.to_numeric(
-                    df[column], errors="coerce"
-                ).astype("Int64")
+            df = convert_statistics_columns_to_nullable_int(df)
 
         df.set_index(id_key, inplace=True)
         return df
