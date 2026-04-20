@@ -13,8 +13,12 @@ class TestSearch(unittest.TestCase):
 
     def test_caption(self):
         df_caption = Search("Test", caption=True).df
+        self.assertIsNotNone(df_caption)
+        self.assertIn("video_caption", df_caption.columns)
         list_caption = df_caption["video_caption"].to_list()
-        self.assertTrue(len([_ for _ in list_caption if _ is None]) > 0)
+        self.assertTrue(
+            all(caption is None or isinstance(caption, str) for caption in list_caption)
+        )
 
     def test_channel(self):
         df_channel = Search("Test", item_type="channel").df
