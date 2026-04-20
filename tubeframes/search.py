@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 import time
 import pandas as pd
@@ -10,8 +11,14 @@ from tubeframes.utils import (
     get_video_statistics,
     process_thumbnails,
     create_df_from_items,
+    format_datetime_to_rfc3339,
 )
 from tubeframes.config.constants import (
+    SEARCH_DEFAULT_ORDER,
+    SEARCH_DEFAULT_SAFE_SEARCH,
+    SEARCH_ORDER_VALUES,
+    SEARCH_SAFE_SEARCH_VALUES,
+    SEARCH_VIDEO_DURATION_VALUES,
     VIDEO_STATISTICS_TARGET_COLUMNS,
     YOUTUBE_API_MAX_PAGE_SIZE,
 )
@@ -28,6 +35,14 @@ class Search:
         accepted_caption_lang: Optional[List[str]] = None,
         item_type: str = "video",
         developer_key: Optional[str] = None,
+        published_after: Optional[datetime] = None,
+        published_before: Optional[datetime] = None,
+        region_code: Optional[str] = None,
+        relevance_language: Optional[str] = None,
+        order: str = SEARCH_DEFAULT_ORDER,
+        video_duration: Optional[str] = None,
+        safe_search: str = SEARCH_DEFAULT_SAFE_SEARCH,
+        channel_id: Optional[str] = None,
     ) -> None:
         """
         Initialize the Search class.
@@ -39,15 +54,94 @@ class Search:
             accepted_caption_lang: List of accepted languages for captions
             item_type: Type of item to search for ("video" or "channel")
             developer_key: YouTube API developer key
+            published_after: Include only resources published at/after this datetime
+            published_before: Include only resources published before/at this datetime
+            region_code: ISO 3166-1 alpha-2 region code
+            relevance_language: Preferred relevance language (e.g. "en", "pt")
+            order: Result ordering strategy
+            video_duration: Video duration filter ("short", "medium", "long")
+            safe_search: Safe search level ("none", "moderate", "strict")
+            channel_id: Restrict results to a specific channel
         """
         if accepted_caption_lang is None:
             accepted_caption_lang = ["pt", "en"]
         self._accepted_caption_lang = accepted_caption_lang
         self._developer_key = get_dev_key(developer_key)
+        self._search_filters = self._build_search_filters(
+            item_type=item_type,
+            published_after=published_after,
+            published_before=published_before,
+            region_code=region_code,
+            relevance_language=relevance_language,
+            order=order,
+            video_duration=video_duration,
+            safe_search=safe_search,
+            channel_id=channel_id,
+        )
         self.raw = self._consolidate_search(term, maxres, item_type)
         self.df = self._build_dataframe(
             item_type=item_type, caption=caption
         )
+
+    @staticmethod
+    def _validate_choice(
+        parameter_name: str, value: str, allowed_values: Tuple[str, ...]
+    ) -> str:
+        if value not in allowed_values:
+            allowed_values_str = ", ".join(allowed_values)
+            raise ValueError(
+                f"{parameter_name} must be one of: {allowed_values_str}"
+            )
+        return value
+
+    @staticmethod
+    def _build_search_filters(
+        item_type: str,
+        published_after: Optional[datetime],
+        published_before: Optional[datetime],
+        region_code: Optional[str],
+        relevance_language: Optional[str],
+        order: str,
+        video_duration: Optional[str],
+        safe_search: str,
+        channel_id: Optional[str],
+    ) -> Dict[str, str]:
+        filters: Dict[str, str] = {
+            "order": Search._validate_choice(
+                "order", order, SEARCH_ORDER_VALUES
+            ),
+            "safeSearch": Search._validate_choice(
+                "safe_search", safe_search, SEARCH_SAFE_SEARCH_VALUES
+            ),
+        }
+
+        published_after_str = format_datetime_to_rfc3339(published_after)
+        if published_after_str is not None:
+            filters["publishedAfter"] = published_after_str
+
+        published_before_str = format_datetime_to_rfc3339(published_before)
+        if published_before_str is not None:
+            filters["publishedBefore"] = published_before_str
+
+        if region_code:
+            filters["regionCode"] = region_code
+        if relevance_language:
+            filters["relevanceLanguage"] = relevance_language
+        if channel_id:
+            filters["channelId"] = channel_id
+
+        if video_duration is not None:
+            if item_type != "video":
+                raise ValueError(
+                    "video_duration can only be used when item_type='video'"
+                )
+            filters["videoDuration"] = Search._validate_choice(
+                "video_duration",
+                video_duration,
+                SEARCH_VIDEO_DURATION_VALUES,
+            )
+
+        return filters
 
     def _consolidate_search(
         self, term: str, maxres: int, item_type: str
@@ -139,16 +233,17 @@ class Search:
             Dict: Search results
         """
         tubeframes_client = create_tubeframes_client(self._developer_key)
+        search_params: Dict[str, object] = {
+            "q": term,
+            "part": "id,snippet",
+            "maxResults": maxres,
+            "pageToken": page_token,
+            "type": item_type,
+        }
+        search_params.update(self._search_filters)
         search_response = (
             tubeframes_client.search()
-            .list(
-                q=term,
-                part="id,snippet",
-                maxResults=maxres,
-                pageToken=page_token,
-                type=item_type,
-                safeSearch="none",
-            )
+            .list(**search_params)
             .execute()
         )
         return search_response

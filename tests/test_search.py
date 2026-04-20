@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from unittest.mock import Mock, patch
 
@@ -31,6 +32,94 @@ class TestSearch(unittest.TestCase):
     def test_big_shape(self):
         df_shape = Search("Test", maxres=100).df.shape
         self.assertTrue(df_shape[0] >= 50)
+
+
+class TestSearchFilters(unittest.TestCase):
+
+    def test_build_search_filters_maps_supported_options(self) -> None:
+        filters = Search._build_search_filters(
+            item_type="video",
+            published_after=datetime(2024, 1, 1, 10, 0, 0),
+            published_before=datetime(
+                2024, 1, 2, 10, 0, 0, tzinfo=timezone.utc
+            ),
+            region_code="US",
+            relevance_language="en",
+            order="date",
+            video_duration="short",
+            safe_search="strict",
+            channel_id="channel_1",
+        )
+
+        self.assertEqual(filters["publishedAfter"], "2024-01-01T10:00:00Z")
+        self.assertEqual(filters["publishedBefore"], "2024-01-02T10:00:00Z")
+        self.assertEqual(filters["regionCode"], "US")
+        self.assertEqual(filters["relevanceLanguage"], "en")
+        self.assertEqual(filters["order"], "date")
+        self.assertEqual(filters["videoDuration"], "short")
+        self.assertEqual(filters["safeSearch"], "strict")
+        self.assertEqual(filters["channelId"], "channel_1")
+
+    def test_build_search_filters_rejects_invalid_order(self) -> None:
+        with self.assertRaisesRegex(ValueError, "order"):
+            Search._build_search_filters(
+                item_type="video",
+                published_after=None,
+                published_before=None,
+                region_code=None,
+                relevance_language=None,
+                order="popularity",
+                video_duration=None,
+                safe_search="none",
+                channel_id=None,
+            )
+
+    def test_build_search_filters_rejects_video_duration_for_channel(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "video_duration"):
+            Search._build_search_filters(
+                item_type="channel",
+                published_after=None,
+                published_before=None,
+                region_code=None,
+                relevance_language=None,
+                order="relevance",
+                video_duration="short",
+                safe_search="none",
+                channel_id=None,
+            )
+
+    def test_search_request_includes_filter_params(self) -> None:
+        search = Search.__new__(Search)
+        search._developer_key = "key"
+        search._search_filters = {
+            "order": "date",
+            "safeSearch": "strict",
+            "regionCode": "US",
+        }
+
+        mock_client = Mock()
+        mock_client.search.return_value.list.return_value.execute.return_value = {
+            "items": []
+        }
+
+        with patch(
+            "tubeframes.search.create_tubeframes_client",
+            return_value=mock_client,
+        ):
+            search._search_request(
+                term="python",
+                maxres=10,
+                page_token="TOKEN_1",
+                item_type="video",
+            )
+
+        request_kwargs = mock_client.search.return_value.list.call_args.kwargs
+        self.assertEqual(request_kwargs["order"], "date")
+        self.assertEqual(request_kwargs["safeSearch"], "strict")
+        self.assertEqual(request_kwargs["regionCode"], "US")
+        self.assertEqual(request_kwargs["pageToken"], "TOKEN_1")
 
 
 class TestSearchPagination(unittest.TestCase):

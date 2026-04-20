@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 import pandas as pd
@@ -43,6 +44,47 @@ class TestChannelInfo(unittest.TestCase):
         )
 
         self.assertIn("caption", channel_info.df.columns)
+
+
+class TestChannelInfoFilters(unittest.TestCase):
+
+    def test_build_activity_filters_maps_supported_options(self) -> None:
+        filters = ChannelInfo._build_activity_filters(
+            published_after=datetime(2024, 2, 1, 8, 30, 0),
+            published_before=datetime(
+                2024, 2, 2, 8, 30, 0, tzinfo=timezone.utc
+            ),
+            region_code="BR",
+        )
+
+        self.assertEqual(filters["publishedAfter"], "2024-02-01T08:30:00Z")
+        self.assertEqual(filters["publishedBefore"], "2024-02-02T08:30:00Z")
+        self.assertEqual(filters["regionCode"], "BR")
+
+    def test_fetch_channel_videos_includes_filter_params(self) -> None:
+        channel_info = ChannelInfo.__new__(ChannelInfo)
+        channel_info._channel_ids = ["channel_1"]
+        channel_info._max_results = 5
+        channel_info._activity_filters = {
+            "publishedAfter": "2024-01-01T00:00:00Z",
+            "regionCode": "US",
+        }
+
+        youtube_mock = Mock()
+        youtube_mock.activities.return_value.list.return_value.execute.return_value = {
+            "items": []
+        }
+        channel_info._youtube = youtube_mock
+
+        channel_info._fetch_channel_videos()
+
+        request_kwargs = (
+            youtube_mock.activities.return_value.list.call_args.kwargs
+        )
+        self.assertEqual(
+            request_kwargs["publishedAfter"], "2024-01-01T00:00:00Z"
+        )
+        self.assertEqual(request_kwargs["regionCode"], "US")
 
 
 class TestChannelInfoCaptionIntegration(unittest.TestCase):

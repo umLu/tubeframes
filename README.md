@@ -160,11 +160,20 @@ The `Search` class accepts the following arguments:
 | accepted_caption_lang | list | No | ['pt', 'en'] | List of accepted languages for captions |
 | item_type | string | No | "video" | Type of search: "video" or "channel" |
 | developer_key | string | No | - | YouTube API key (optional if set as environment variable) |
+| published_after | datetime | No | - | Include only resources published at/after this datetime |
+| published_before | datetime | No | - | Include only resources published before/at this datetime |
+| region_code | string | No | - | ISO 3166-1 alpha-2 region code |
+| relevance_language | string | No | - | Preferred relevance language for results |
+| order | string | No | "relevance" | Sort order: "date", "rating", "relevance", "viewCount" |
+| video_duration | string | No | - | Video duration filter: "short", "medium", "long" (video only) |
+| safe_search | string | No | "none" | Safe search level: "none", "moderate", "strict" |
+| channel_id | string | No | - | Restrict search results to one channel |
 
 Example with all parameters:
 
 ```python
 import tubeframes as yt
+from datetime import datetime
 
 tubeframes_search = yt.Search(
     term="Python Tutorial",
@@ -172,7 +181,11 @@ tubeframes_search = yt.Search(
     maxres=100,
     accepted_caption_lang=['pt', 'en'],
     item_type="video",
-    developer_key="<YOUR_DEVELOPER_KEY>"
+    developer_key="<YOUR_DEVELOPER_KEY>",
+    published_after=datetime(2024, 1, 1),
+    region_code="US",
+    order="date",
+    video_duration="short",
 )
 
 # Access the resulting DataFrame
@@ -189,17 +202,23 @@ The `ChannelInfo` class accepts the following arguments:
 | max_results | integer | No | 10 | Maximum number of results per channel |
 | accepted_caption_lang | list | No | ['pt', 'en'] | List of accepted languages for captions |
 | developer_key | string | No | - | YouTube API key (optional if set as environment variable) |
+| published_after | datetime | No | - | Include only channel activities at/after this datetime |
+| published_before | datetime | No | - | Include only channel activities before/at this datetime |
+| region_code | string | No | - | ISO 3166-1 alpha-2 region code |
 
 Example with all parameters:
 
 ```python
 import tubeframes as yt
+from datetime import datetime
 
 channel_info = yt.ChannelInfo(
     channel_ids=["<CHANNEL ID 1>", "<CHANNEL ID 2>"],
     max_results=20,
     accepted_caption_lang=['pt', 'en', 'es'],
-    developer_key="<YOUR_DEVELOPER_KEY>"
+    developer_key="<YOUR_DEVELOPER_KEY>",
+    published_after=datetime(2024, 1, 1),
+    region_code="BR",
 )
 
 # Access the resulting DataFrame

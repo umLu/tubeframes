@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Union, Dict, Optional
 import pandas as pd
 
@@ -7,6 +8,7 @@ from tubeframes.utils import (
     create_tubeframes_client,
     process_thumbnails,
     create_df_from_items,
+    format_datetime_to_rfc3339,
 )
 
 
@@ -19,6 +21,9 @@ class ChannelInfo:
         max_results: int = 10,
         accepted_caption_lang: Optional[List[str]] = None,
         developer_key: Optional[str] = None,
+        published_after: Optional[datetime] = None,
+        published_before: Optional[datetime] = None,
+        region_code: Optional[str] = None,
     ) -> None:
         """
         Initialize the class to get information about videos from channels.
@@ -28,6 +33,9 @@ class ChannelInfo:
             max_results: Maximum number of results per channel.
             accepted_caption_lang: List of accepted languages for captions.
             developer_key: YouTube API developer key.
+            published_after: Include only resources published at/after this datetime.
+            published_before: Include only resources published before/at this datetime.
+            region_code: ISO 3166-1 alpha-2 region code.
         """
         if accepted_caption_lang is not None:
             self._accepted_caption_lang = accepted_caption_lang
@@ -40,10 +48,35 @@ class ChannelInfo:
 
         self._channel_ids = channel_ids
         self._max_results = max_results
+        self._activity_filters = self._build_activity_filters(
+            published_after=published_after,
+            published_before=published_before,
+            region_code=region_code,
+        )
         self._youtube = create_tubeframes_client(self._developer_key)
 
         self.raw_data = self._fetch_channel_videos()
         self.df = self._build_dataframe()
+
+    @staticmethod
+    def _build_activity_filters(
+        published_after: Optional[datetime],
+        published_before: Optional[datetime],
+        region_code: Optional[str],
+    ) -> Dict[str, str]:
+        filters: Dict[str, str] = {}
+        published_after_str = format_datetime_to_rfc3339(published_after)
+        if published_after_str is not None:
+            filters["publishedAfter"] = published_after_str
+
+        published_before_str = format_datetime_to_rfc3339(published_before)
+        if published_before_str is not None:
+            filters["publishedBefore"] = published_before_str
+
+        if region_code:
+            filters["regionCode"] = region_code
+
+        return filters
 
     def _fetch_channel_videos(self) -> Dict:
         """
@@ -62,16 +95,16 @@ class ChannelInfo:
                         part="snippet,contentDetails",
                         channelId=channel_id,
                         maxResults=self._max_results,
+                        **self._activity_filters,
                     )
                     .execute()
                 )
 
                 all_data[channel_id] = response
             except Exception as e:
-                print(
-                    f"Error fetching videos for channel {channel_id}: ",
-                    str(e),
-                )
+                raise RuntimeError(
+                    f"Error fetching videos for channel {channel_id}"
+                ) from e
 
         return all_data
 

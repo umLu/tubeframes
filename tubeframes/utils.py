@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import os
 import warnings
@@ -19,6 +20,28 @@ def _warn_statistics_unavailable(video_id: str) -> None:
         "Returning NA for statistics columns.",
         UserWarning,
         stacklevel=2,
+    )
+
+
+def format_datetime_to_rfc3339(value: Optional[datetime]) -> Optional[str]:
+    """
+    Convert a datetime to UTC RFC 3339 string expected by YouTube API.
+
+    Args:
+        value: Datetime value or None.
+
+    Returns:
+        Optional[str]: RFC 3339 timestamp in UTC or None.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        raise TypeError("value must be a datetime instance")
+
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace(
+        "+00:00", "Z"
     )
 
 
