@@ -90,6 +90,8 @@ tubeframes_search.df  # DataFrame with YouTube infos (likes, views, title, etc.)
 
 ### Working with Captions
 
+> Caption extraction is **experimental**, recommended mainly for personal/sporadic use, and may face blocking/breakage risks. See dependencies: `youtube-transcript-api` (https://github.com/jdepoix/youtube-transcript-api) and `yt-dlp` (https://github.com/yt-dlp/yt-dlp).
+
 To include video captions in your results, use the argument `caption=True`:
 
 ```python
@@ -136,15 +138,15 @@ channel_info = yt.ChannelInfo(
     max_results=10,
     accepted_caption_lang=['pt', 'en'],
 )
-channel_info.df  # DataFrame with video information and captions
+channel_info.df  # DataFrame with video information, captions, and statistics
 ```
 
 **Channel information results:**
 
-| channelId           | videoId     | title                 | publishedAt               | caption                                                 | thumbnailUrl                    |
-|---------------------|-------------|------------------------|---------------------------|--------------------------------------------------------|----------------------------------|
-| EXAMPLE_CHANNEL_ID1 | EXAMPLE_VIDEO_ID1 | Example Video Title 1 | 2025-03-22 22:00:39+00:00 | Example caption text; More example text; Thanks... | https://example.com/sddefault.jpg |
-| EXAMPLE_CHANNEL_ID1 | EXAMPLE_VIDEO_ID2 | Example Video Title 2 | 2025-03-22 18:00:22+00:00 | Example caption text; Follow us on social media... | https://example.com/maxresdefault.jpg |
+| channelId           | videoId     | title                 | publishedAt               | viewCount | likeCount | commentCount | caption                                                 | thumbnailUrl                    |
+|---------------------|-------------|------------------------|---------------------------|-----------|-----------|--------------|--------------------------------------------------------|----------------------------------|
+| EXAMPLE_CHANNEL_ID1 | EXAMPLE_VIDEO_ID1 | Example Video Title 1 | 2025-03-22 22:00:39+00:00 | 10500     | 320       | 21           | Example caption text; More example text; Thanks... | https://example.com/sddefault.jpg |
+| EXAMPLE_CHANNEL_ID1 | EXAMPLE_VIDEO_ID2 | Example Video Title 2 | 2025-03-22 18:00:22+00:00 | 8700      | 290       | 18           | Example caption text; Follow us on social media... | https://example.com/maxresdefault.jpg |
 
 ## Parameter Reference
 
